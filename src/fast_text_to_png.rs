@@ -1,14 +1,14 @@
-// Copy paste of https://crates.io/crates/text-to-png
-// with options modified to optimize for speed
+// Mostly stolen from https://crates.io/crates/text-to-png
 use derive_new::new;
 use fontdb::Database;
 use resvg::render_node;
-use std::fmt::Display;
-use tiny_skia::Pixmap;
+use std::{collections::HashMap, fmt::Display};
+use tiny_skia::{Pixmap, PremultipliedColorU8};
 use usvg::{FitTo, ImageRendering, NodeExt, Options, TextRendering, Tree};
 
 const DEFAULT_FONT: &[u8] = include_bytes!("resources/CallingCode-Regular.ttf");
 const DEFAULT_FONT_NAME: &str = "Calling Code";
+const FONT_SIZE: u32 = 15;
 
 lazy_static::lazy_static! {
     static ref DEFAULT_FONT_DB : Database = create_default_font_db();
@@ -35,13 +35,8 @@ fn create_default_font_db() -> Database {
 /// Representation of a RGB color
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Default, new)]
 pub struct Color {
-    /// Red Component
     pub r: u8,
-
-    /// Green Component
     pub g: u8,
-
-    /// Blue Component
     pub b: u8,
 }
 
@@ -68,10 +63,23 @@ impl From<u32> for Color {
     }
 }
 
-pub fn render_text_to_png_data(text: String, font_size: u32, color: Color) -> Vec<u8> {
+pub fn black_pixmap_to_colored_png(mut pixmap: Pixmap, color: Color) -> Vec<u8> {
+    for pixel in pixmap.pixels_mut() {
+        let alpha = pixel.alpha();
+        if alpha == 0 {
+            continue;
+        };
+        *pixel = PremultipliedColorU8::from_rgba(color.r, color.g, color.b, alpha).unwrap()
+    }
+    pixmap.encode_png().unwrap()
+}
+
+fn black_pixmap_for_text(text: String) -> Pixmap {
     let content = format!(
         include_str!("resources/template.svg"),
-        font_size, color, text
+        FONT_SIZE,
+        Color { r: 0, g: 0, b: 0 },
+        text
     );
 
     let tree = Tree::from_str(content.as_str(), &OPTIONS.to_ref()).unwrap();
@@ -83,5 +91,16 @@ pub fn render_text_to_png_data(text: String, font_size: u32, color: Color) -> Ve
     let mut pixmap = Pixmap::new(size.width().ceil() as u32, size.height().ceil() as u32).unwrap();
 
     render_node(&tree, &text_node, FitTo::Original, pixmap.as_mut());
-    pixmap.encode_png().unwrap()
+
+    pixmap
+}
+
+pub fn get_num_to_black_pixmaps(max_num: u32) -> HashMap<u32, Pixmap> {
+    (0..=max_num)
+        .zip(
+            (0..=max_num)
+                .map(|n| n.to_string())
+                .map(black_pixmap_for_text),
+        )
+        .collect()
 }
