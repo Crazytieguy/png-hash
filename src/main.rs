@@ -4,10 +4,8 @@ use fast_text_to_png::{get_num_to_black_pixmaps, Color};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use sha2::{Digest, Sha256};
 
-use crate::fast_text_to_png::black_pixmap_to_colored_png;
-
-const MAX_IMAGES: u32 = 60000000;
-const MAX_COLOR: u32 = 255 * 255 * 255;
+const MAX_IMAGES: usize = 60_000_000;
+const MAX_COLOR: usize = 255 * 255 * 255;
 const FILE_NAME: &str = "image.png";
 
 mod fast_text_to_png;
@@ -19,9 +17,8 @@ fn main() {
         .into_par_iter()
         .map(|i| {
             let num = i / MAX_COLOR;
-            let pixmap = num_to_black_pixmaps.get(&num).unwrap().clone();
-            let color = Color::from(i % MAX_COLOR);
-            black_pixmap_to_colored_png(pixmap, color)
+            let color = Color::from((i % MAX_COLOR) as u32);
+            num_to_black_pixmaps[&num].get_colored_png(color)
         })
         .min_by_key(|data| Sha256::digest(&data[..]))
         .unwrap();

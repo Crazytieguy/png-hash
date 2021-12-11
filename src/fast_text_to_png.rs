@@ -63,15 +63,37 @@ impl From<u32> for Color {
     }
 }
 
-pub fn black_pixmap_to_colored_png(mut pixmap: Pixmap, color: Color) -> Vec<u8> {
-    for pixel in pixmap.pixels_mut() {
-        let alpha = pixel.alpha();
-        if alpha == 0 {
-            continue;
-        };
-        *pixel = PremultipliedColorU8::from_rgba(color.r, color.g, color.b, alpha).unwrap()
+pub struct SmartPixmap {
+    pixmap: Pixmap,
+    pixel_positions: Vec<usize>,
+}
+
+impl From<Pixmap> for SmartPixmap {
+    fn from(pixmap: Pixmap) -> Self {
+        let pixel_positions = pixmap
+            .pixels()
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| p.alpha() == 255)
+            .map(|(i, _)| i)
+            .collect();
+        Self {
+            pixmap,
+            pixel_positions,
+        }
     }
-    pixmap.encode_png().unwrap()
+}
+
+impl SmartPixmap {
+    pub fn get_colored_png(&self, color: Color) -> Vec<u8> {
+        let mut pixmap = self.pixmap.clone();
+        let pixels = pixmap.pixels_mut();
+        let c = PremultipliedColorU8::from_rgba(color.r, color.g, color.b, 255).unwrap();
+        for &i in &self.pixel_positions {
+            pixels[i] = c;
+        }
+        pixmap.encode_png().unwrap()
+    }
 }
 
 fn black_pixmap_for_text(text: String) -> Pixmap {
@@ -95,12 +117,9 @@ fn black_pixmap_for_text(text: String) -> Pixmap {
     pixmap
 }
 
-pub fn get_num_to_black_pixmaps(max_num: u32) -> HashMap<u32, Pixmap> {
+pub fn get_num_to_black_pixmaps(max_num: usize) -> HashMap<usize, SmartPixmap> {
     (0..=max_num)
-        .zip(
-            (0..=max_num)
-                .map(|n| n.to_string())
-                .map(black_pixmap_for_text),
-        )
+        .map(|n| black_pixmap_for_text(n.to_string()).into())
+        .enumerate()
         .collect()
 }
